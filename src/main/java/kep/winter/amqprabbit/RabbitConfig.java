@@ -7,55 +7,58 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class RabbitConfig {
-
-    private static final String EXCHANGE_NAME = "cafe.topic";
-
-
-    private static final String COFFEE_QUEUE = "coffee.queue";
-    private static final String COFFEE_ROUTE_KEY = "order.coffee.#";
-
-    private static final String CAFE_QUEUE = "cafe.queue";
-    private static final String CAFE_ROUTE_KEY = "order.cafe.#";
+    public static final String RPC_QUEUE1 = "queue_1";
+    public static final String RPC_QUEUE2 = "queue_2";
+    public static final String RPC_EXCHANGE = "rpc_exchange";
 
 
     @Bean
-    Queue coffeeQueue() {
-        return new Queue(COFFEE_QUEUE, false);
+    Queue msgQueue() {
+        return new Queue(RPC_QUEUE1);
     }
 
     @Bean
-    Binding coffeeBinding(Queue coffeeQueue, TopicExchange exchange) {
-        return BindingBuilder.bind(coffeeQueue).to(exchange).with(COFFEE_ROUTE_KEY);
+    Queue replyQueue() {
+        return new Queue(RPC_QUEUE2);
     }
-
-    @Bean
-    RabbitTemplate coffeeTemplate(ConnectionFactory connectionFactory) {
-        RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
-        return rabbitTemplate;
-    }
-
-    /*
-    cafe queue
-     */
-    @Bean
-    Queue cafeQueue() {
-        return new Queue(CAFE_QUEUE, false);
-    }
-
-    @Bean
-    Binding cafeBinding(Queue cafeQueue, TopicExchange exchange) {
-        return BindingBuilder.bind(cafeQueue).to(exchange).with(CAFE_ROUTE_KEY);
-    }
-
 
     @Bean
     TopicExchange exchange() {
-        return new TopicExchange(EXCHANGE_NAME);
+        return new TopicExchange(RPC_EXCHANGE);
     }
+
+    @Bean
+    Binding msgBinding() {
+        return BindingBuilder.bind(msgQueue()).to(exchange()).with(RPC_QUEUE1);
+    }
+
+    @Bean
+    Binding replyBinding() {
+        return BindingBuilder.bind(replyQueue()).to(exchange()).with(RPC_QUEUE2);
+    }
+
+    @Bean
+    RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+        RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+        rabbitTemplate.setReplyAddress(RPC_QUEUE2);
+        rabbitTemplate.setReplyTimeout(60000);
+        return rabbitTemplate;
+    }
+
+    @Bean
+    SimpleMessageListenerContainer replyContainer(ConnectionFactory connectionFactory) {
+        SimpleMessageListenerContainer container = new SimpleMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        container.setQueueNames(RPC_QUEUE2);
+        container.setMessageListener(rabbitTemplate(connectionFactory));
+        return container;
+    }
+
 
 }
